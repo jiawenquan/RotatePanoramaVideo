@@ -49,31 +49,38 @@ void rotatePanoramaWithLUT(const cv::Mat &input, cv::Mat &output, const cv::Mat 
 
 int main()
 {
-    std::string videoPath = "/home/goslam/Documents/RS全景镜头/全景_VID_20230328_013007.mp4";
-    cv::VideoCapture videoCapture(videoPath);
+    std::string inputVideoPath = "/home/goslam/Documents/RS全景镜头/全景_VID_20230328_013007.mp4";
+    std::string outputVideoPath = "/home/goslam/Documents/RS全景镜头/全景_VID_20230328_013007_out.mp4";
+
+    cv::VideoCapture videoCapture(inputVideoPath);
     if (!videoCapture.isOpened())
-        return -1;
+    {
+        std::cerr << "Error: Unable to open the input video file." << std::endl;
+        return 1;
+    }
 
     int width = static_cast<int>(videoCapture.get(cv::CAP_PROP_FRAME_WIDTH));
     int height = static_cast<int>(videoCapture.get(cv::CAP_PROP_FRAME_HEIGHT));
     double fps = videoCapture.get(cv::CAP_PROP_FPS);
+    int inputCodec = static_cast<int>(videoCapture.get(cv::CAP_PROP_FOURCC));
 
-    double pitch = 0.0, yaw = 90.0, roll = 90.0;
-    cv::Mat mapX = cv::Mat(height, width, CV_32FC1);
-    cv::Mat mapY = cv::Mat(height, width, CV_32FC1);
-    createLUT(mapX, mapY, width, height, pitch, yaw, roll);
+    std::ifstream inputFile(inputVideoPath, std::ios::binary | std::ios::ate);
+    std::streamsize inputFileSize = inputFile.tellg();
+    double inputBitrate = (inputFileSize * 8) / (videoCapture.get(cv::CAP_PROP_FRAME_COUNT) / fps);
+    int ex = inputCodec | static_cast<int>(inputBitrate * 2 * 1000) << 8;
 
-    std::string outputVideoPath = "/home/goslam/Documents/RS全景镜头/全景_VID_20230328_013007_out.mp4";
-    cv::VideoWriter videoWriter(outputVideoPath, cv::VideoWriter::fourcc('a', 'v', 'c', '1'), fps, cv::Size(width, height));
+    cv::VideoWriter videoWriter(outputVideoPath, ex, fps, cv::Size(width, height), true);
 
-    if (!videoWriter.isOpened())
-        return -1;
+    cv::Mat frame, remappedFrame;
+    cv::Mat mapX(height, width, CV_32FC1);
+    cv::Mat mapY(height, width, CV_32FC1);
 
-    cv::Mat frame, rotatedFrame;
+    createLUT(mapX, mapY, width, height, 0.0, 90.0, 90.0);
+
     while (videoCapture.read(frame))
     {
-        rotatePanoramaWithLUT(frame, rotatedFrame, mapX, mapY);
-        videoWriter.write(rotatedFrame);
+        cv::remap(frame, remappedFrame, mapX, mapY, cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
+        videoWriter.write(remappedFrame);
     }
 
     videoCapture.release();
